@@ -153,10 +153,10 @@ typedef struct __Table{
 	int			tcolumn;
 	gint		ncolumns;
 	gchar 		*tvalue;
-	GList		*tabledata;
-	GList		*namedata;
-	GList		*fgdata;
-	GList		*bgdata;
+	GList		*texts;
+	GList		*text_names;
+	GList		*fgcolors;
+	GList		*bgcolors;
 } _Table;
 
 typedef struct __Calendar{

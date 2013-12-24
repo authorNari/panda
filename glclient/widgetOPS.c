@@ -317,37 +317,42 @@ GetPandaTable(
 	GtkWidget	*widget,
 	_Table		*data)
 {
-	GtkTreeModel *model;
-	GtkTreeIter iter;
-	int i,j,diff;
-	gchar *text;
-	gchar **rowdata;
+	GList *list;
+	int i,j,k,rows,columns;
+	gchar *t1,*t2;
 ENTER_FUNC;
-	gtk_widget_child_focus(widget,GTK_DIR_TAB_FORWARD);
 	data->trow = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),
 		"send_data_row"));
 	data->tcolumn = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),
 		"send_data_column"));
 	data->tvalue = g_strdup((gchar*)g_object_get_data(G_OBJECT(widget),
 		"send_data_value"));
-	model = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
-	gtk_tree_model_get_iter_first(model,&iter);
-	i = 0;
-	do {
-		rowdata = (gchar**)(g_list_nth_data(data->tabledata,i));
-		for(j=0;rowdata[j]!=NULL;j++) {
-			gtk_tree_model_get(model,&iter,j,&text,-1);
-			diff = strcmp(rowdata[j],text);
-			g_free(rowdata[j]);
-			if (!diff) {
-				g_free(text);
-				rowdata[j] = NULL;
+	g_object_get(G_OBJECT(widget),
+		"rows",&rows,
+		"columns",&columns,
+		NULL);
+	if ((rows*columns) != g_list_length(data->texts)) {
+		return;
+	}
+
+	k = 0;
+	list = NULL;
+	for(i=0;i<rows;i++) {
+		for(j=0;j<columns;j++) {
+			t1 = (char*)g_list_nth_data(data->texts,k);
+ 			t2 = (char*)gtk_panda_table_get_cell_text(
+					GTK_PANDA_TABLE(widget),i,j);
+			if (!strcmp(t1,t2)) {
+				list = g_list_append(list,NULL);
 			} else {
-				rowdata[j] = text;
+				list = g_list_append(list,g_strdup(t2));
 			}
+			g_free(t1);
+			k++;
 		}
-		i+=1;
-	} while(gtk_tree_model_iter_next(model,&iter));
+	}
+	g_list_free(data->texts);
+	data->texts = list;
 LEAVE_FUNC;
 }
 
@@ -357,32 +362,42 @@ SetPandaTable(
 	WidgetData	*wdata,
 	_Table		*data)
 {
-	int				j;
-	char			**rowdata;
-	char			**fgrowdata;
-	char			**bgrowdata;
+	int				i,j,k,rows,columns;
 
 ENTER_FUNC;
 	SetCommon(widget,wdata);
 	gtk_panda_table_set_xim_enabled(GTK_PANDA_TABLE(widget),data->ximenabled);
-	for	( j = 0 ; j < g_list_length(data->tabledata) ; j ++ ) {
-		rowdata = g_list_nth_data(data->tabledata,j);
-		gtk_panda_table_set_row(GTK_PANDA_TABLE(widget),j,rowdata);
+
+	g_object_get(G_OBJECT(widget),
+		"rows",&rows,
+		"columns",&columns,
+		NULL);
+	if (
+		(rows*columns) != g_list_length(data->texts) ||
+		(rows*columns) != g_list_length(data->fgcolors) ||
+		(rows*columns) != g_list_length(data->bgcolors)
+	) {
+		Warning("Error in GtkPandaTable[%s];maybe mismatch with record",
+			gtk_widget_get_name(widget));
+		return;
 	}
-	for	( j = 0 ; j < g_list_length(data->fgdata) ; j ++ ) {
-		fgrowdata = g_list_nth_data(data->fgdata,j);
-		gtk_panda_table_set_fgcolor(GTK_PANDA_TABLE(widget),j,fgrowdata);
+	k = 0;
+fprintf(stderr,"start\n");
+	for(i=0;i<rows;i++) {
+		for(j=0;j<columns;j++) {
+			gtk_panda_table_set_cell_text(GTK_PANDA_TABLE(widget),i,j,
+				g_list_nth_data(data->texts,k));
+			gtk_panda_table_set_cell_color(GTK_PANDA_TABLE(widget),i,j,
+				g_list_nth_data(data->fgcolors,k),
+				g_list_nth_data(data->bgcolors,k));
+			k++;
+		}
 	}
-	for	( j = 0 ; j < g_list_length(data->bgdata) ; j ++ ) {
-		bgrowdata = g_list_nth_data(data->bgdata,j);
-		gtk_panda_table_set_bgcolor(GTK_PANDA_TABLE(widget),j,bgrowdata);
-	}
-	if (data->trow >= 0 && data->tcolumn >= 0) {
-		gtk_panda_table_moveto(GTK_PANDA_TABLE(widget), 
-			data->trow, data->tcolumn, TRUE, data->trowattr, 0.0); 
-	} else {
-		gtk_panda_table_stay(GTK_PANDA_TABLE(widget));
-	}
+fprintf(stderr,"end\n");
+
+    gtk_widget_set_can_focus(widget,FALSE);
+	gtk_panda_table_moveto(GTK_PANDA_TABLE(widget), 
+		data->trow, data->tcolumn, data->trowattr, 0.5); 
 	_AddChangedWidget(widget);
 LEAVE_FUNC;
 }

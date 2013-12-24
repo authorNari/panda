@@ -1377,10 +1377,9 @@ SendPandaTable(
 	WidgetData	*data,
 	NETFILE	*fp)
 {
-	char		iname[SIZE_BUFF];
-	char		**rowdata,**namerowdata;
+	char		iname[SIZE_BUFF],*text,*name;
 	 _Table		*attrs;
-	int 		i,j;
+	int 		i,k;
 
 ENTER_FUNC;
 	attrs = (_Table *)data->attrs;
@@ -1399,17 +1398,17 @@ ENTER_FUNC;
 	GL_SendName(fp,iname);
 	SendStringData(fp,GL_TYPE_VARCHAR ,attrs->tvalue);
 
-	if (attrs->tabledata != NULL) {
-		for(i=0;i<g_list_length(attrs->tabledata);i++) {
-			rowdata = (gchar**)(g_list_nth_data(attrs->tabledata,i));
-			namerowdata = (gchar**)(g_list_nth_data(attrs->namedata,i));
-			for(j=0;j<attrs->ncolumns+1;j++) {
-				if (rowdata[j] != NULL) {
+	if (attrs->texts != NULL) {
+        k = 0;
+		for(i=0;i<g_list_length(attrs->texts);i++) {
+			text = (char*)g_list_nth_data(attrs->texts,k);
+			name = (char*)g_list_nth_data(attrs->text_names,k);
+			if (text != NULL) {
 				GL_SendPacketClass(fp,GL_ScreenData);
-				GL_SendName(fp,namerowdata[j]);
-				SendStringData(fp,GL_TYPE_VARCHAR ,rowdata[j]);
-				}
+				GL_SendName(fp,name);
+				SendStringData(fp,GL_TYPE_VARCHAR,text);
 			}
+			k++;
 		}
 	}
 LEAVE_FUNC;
@@ -1425,11 +1424,8 @@ RecvPandaTable(
 	gchar	name[SIZE_BUFF]
 	,		iname[SIZE_BUFF]
 	,		iiname[SIZE_BUFF]
-	,		buff[SIZE_BUFF];
-	gchar	**rowdata
-	,		**namerowdata
-	,		**fgrowdata
-	,		**bgrowdata;
+	,		buff[SIZE_BUFF]
+	,		*text;
 	gint	rowattr
 	,		nitem
 	,		nrows
@@ -1450,39 +1446,36 @@ ENTER_FUNC;
 	} else {
 		// reset data
 		g_free(attrs->tvalue);
-		if (attrs->tabledata != NULL) {
-			for(i=0;i<g_list_length(attrs->tabledata);i++) {
-				rowdata = (char**)g_list_nth_data(attrs->tabledata,i);
-				for(j=0;j<attrs->ncolumns+1;j++) {
-					if (rowdata[j] != NULL) {
-						g_free(rowdata[j]);
-					}
+		if (attrs->texts != NULL) {
+			for(i=0;i<g_list_length(attrs->texts);i++) {
+				text = g_list_nth_data(attrs->texts,i);
+				if (text != NULL) {
+					g_free(text);
 				}
-				g_free(rowdata);
 			}
-			g_list_free(attrs->tabledata);
-			attrs->tabledata = NULL;
+			g_list_free(attrs->texts);
+			attrs->texts = NULL;
 		}
-		if (attrs->namedata != NULL) {
-			for(i=0;i<g_list_length(attrs->namedata);i++) {
-				g_strfreev(g_list_nth_data(attrs->namedata,i));
+		if (attrs->text_names != NULL) {
+			for(i=0;i<g_list_length(attrs->text_names);i++) {
+                g_free(g_list_nth_data(attrs->text_names,i));
 			}
-			g_list_free(attrs->namedata);
-			attrs->namedata = NULL;
+			g_list_free(attrs->text_names);
+			attrs->text_names = NULL;
 		}
-		if (attrs->fgdata != NULL) {
-			for(i=0;i<g_list_length(attrs->fgdata);i++) {
-				g_strfreev(g_list_nth_data(attrs->fgdata,i));
+		if (attrs->fgcolors != NULL) {
+			for(i=0;i<g_list_length(attrs->fgcolors);i++) {
+                g_free(g_list_nth_data(attrs->fgcolors,i));
 			}
-			g_list_free(attrs->fgdata);
-			attrs->fgdata = NULL;
+			g_list_free(attrs->fgcolors);
+			attrs->fgcolors = NULL;
 		}
-		if (attrs->bgdata != NULL) {
-			for(i=0;i<g_list_length(attrs->bgdata);i++) {
-				g_strfreev(g_list_nth_data(attrs->bgdata,i));
+		if (attrs->bgcolors != NULL) {
+			for(i=0;i<g_list_length(attrs->bgcolors);i++) {
+                g_free(g_list_nth_data(attrs->bgcolors,i));
 			}
-			g_list_free(attrs->bgdata);
-			attrs->bgdata = NULL;
+			g_list_free(attrs->bgcolors);
+			attrs->bgcolors = NULL;
 		}
 	}
 
@@ -1543,22 +1536,9 @@ ENTER_FUNC;
 			if		(  !stricmp(name,"rowdata")  ) {
 				GL_RecvDataType(fp);	/*	GL_TYPE_ARRAY	*/
 				nrows = GL_RecvInt(fp);
-				attrs->tabledata = NULL;
-				attrs->namedata = NULL;
-				attrs->fgdata = NULL;
-				attrs->bgdata = NULL;
 				for	( j = 0 ; j < nrows ; j ++ ) {
 					GL_RecvDataType(fp);	/*	GL_TYPE_RECORD	*/
 					attrs->ncolumns = ncolumns = GL_RecvInt(fp);
-
-					rowdata = g_malloc0(sizeof(gchar*)*(ncolumns+1));
-					rowdata[ncolumns] = NULL;
-					namerowdata = g_malloc0(sizeof(gchar*)*(ncolumns+1));
-					namerowdata[ncolumns] = NULL;
-					fgrowdata = g_malloc0(sizeof(gchar*)*(ncolumns+1));
-					fgrowdata[ncolumns] = NULL;
-					bgrowdata = g_malloc0(sizeof(gchar*)*(ncolumns+1));
-					bgrowdata[ncolumns] = NULL;
 
 					for	( k = 0 ; k < ncolumns ; k ++ ) {
 						int nitems;
@@ -1567,31 +1547,32 @@ ENTER_FUNC;
 						GL_RecvDataType(fp);	/*	GL_TYPE_RECORD	*/
 						nitems = GL_RecvInt(fp);
 
-
 						for(l=0;l<nitems;l++) {
 							GL_RecvName(fp, sizeof(iiname), iiname);
 							if (!stricmp(iiname,"celldata")){
 								(void)RecvStringData(fp,buff,SIZE_BUFF);
-								rowdata[k] = g_strdup(buff);
-								namerowdata[k] = g_strdup_printf("%s.rowdata[%d].%s.celldata",data->name,j,iname);
-							} else
-							if (!stricmp(iiname,"fgcolor")){
+								attrs->texts = g_list_append(attrs->texts,
+									g_strdup(buff));
+                                attrs->text_names = 
+									g_list_append(attrs->text_names,
+										g_strdup_printf(
+										"%s.rowdata[%d].%s.celldata",
+										data->name,j,iname));
+							} else if (!stricmp(iiname,"fgcolor")){
 								(void)RecvStringData(fp,buff,SIZE_BUFF);
-								fgrowdata[k] = g_strdup(buff);
-							} else 
-							if (!stricmp(iiname,"bgcolor")){
+								attrs->fgcolors = 
+									g_list_append(attrs->fgcolors,
+									g_strdup(buff));
+							} else if (!stricmp(iiname,"bgcolor")){
 								(void)RecvStringData(fp,buff,SIZE_BUFF);
-								bgrowdata[k] = g_strdup(buff);
+								attrs->bgcolors = 
+									g_list_append(attrs->bgcolors,
+									g_strdup(buff));
 							} else {
 								Warning("does not reach here");
-								(void)RecvStringData(fp,buff,SIZE_BUFF);
 							}
 						}
 					}
-					attrs->tabledata = g_list_append(attrs->tabledata,rowdata);
-					attrs->namedata = g_list_append(attrs->namedata,namerowdata);
-					attrs->fgdata = g_list_append(attrs->fgdata,fgrowdata);
-					attrs->bgdata = g_list_append(attrs->bgdata,bgrowdata);
 				}
 			}
 		}
